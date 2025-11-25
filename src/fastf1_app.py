@@ -169,3 +169,240 @@ class F1RaceDataApp:
         except Exception as e:
             print(f"Feil ved henting av løpsplan: {e}")
             return None
+
+    def get_lap_times_by_driver(self, driver: str) -> Optional[pd.DataFrame]:
+        """
+        Henter detaljerte rundetider for en spesifikk sjåfør
+
+        Args:
+            driver: Sjåførens navn eller 3-bokstav-kode
+
+        Returns:
+            DataFrame med rundetider
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            driver_laps = self.current_session.laps.pick_driver(driver)
+            return driver_laps[
+                ["LapNumber", "LapTime", "Compound", "FreshTyre", "TyreLife"]
+            ].sort_values("LapNumber")
+        except Exception as e:
+            print(f"Feil ved henting av rundetider: {e}")
+            return None
+
+    def get_driver_telemetry_full(
+        self, driver: str, lap_number: Optional[int] = None
+    ) -> Optional[pd.DataFrame]:
+        """
+        Henter komplett telemetri-data for en sjåfør (hastighet, gass, bremsing, motorsving)
+
+        Args:
+            driver: Sjåførens navn eller 3-bokstav-kode
+            lap_number: Spesifikk rundnummer (hvis None, henter raskeste runde)
+
+        Returns:
+            DataFrame med telemetri-data
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            driver_laps = self.current_session.laps.pick_driver(driver)
+
+            if lap_number is not None:
+                lap = driver_laps[driver_laps["LapNumber"] == lap_number].iloc[0]
+            else:
+                lap = driver_laps.pick_fastest()
+
+            telemetry = lap.get_telemetry()
+            # Konverter til km/h hvis nødvendig
+            if "Speed" in telemetry.columns:
+                telemetry["Speed_kmh"] = telemetry["Speed"]
+
+            return telemetry
+        except Exception as e:
+            print(f"Feil ved henting av telemetri: {e}")
+            return None
+
+    def get_position_data(self, driver: Optional[str] = None) -> Optional[pd.DataFrame]:
+        """
+        Henter posisjonsdata (X, Y koordinater) for en sjåfør gjennom løpet
+
+        Args:
+            driver: Sjåførens navn eller 3-bokstav-kode (hvis None, henter alle)
+
+        Returns:
+            DataFrame med posisjonsdata
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            if driver is not None:
+                driver_laps = self.current_session.laps.pick_driver(driver)
+                positions = []
+                for _, lap in driver_laps.iterrows():
+                    try:
+                        telemetry = lap.get_telemetry()
+                        if "X" in telemetry.columns and "Y" in telemetry.columns:
+                            positions.append(
+                                {
+                                    "Driver": driver,
+                                    "LapNumber": lap["LapNumber"],
+                                    "X": telemetry["X"],
+                                    "Y": telemetry["Y"],
+                                }
+                            )
+                    except:
+                        pass
+                return pd.DataFrame(positions)
+            else:
+                # Hent for alle sjåfører
+                all_positions = []
+                for driver in self.current_session.drivers:
+                    pos = self.get_position_data(driver)
+                    if pos is not None:
+                        all_positions.append(pos)
+                return pd.concat(all_positions, ignore_index=True)
+        except Exception as e:
+            print(f"Feil ved henting av posisjonsdata: {e}")
+            return None
+
+    def get_tyre_data(self) -> Optional[pd.DataFrame]:
+        """
+        Henter dekkdata (type og levetid) for alle sjåfører
+
+        Returns:
+            DataFrame med dekk-informasjon
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            laps = self.current_session.laps
+            tyre_info = laps[
+                ["Driver", "LapNumber", "Compound", "FreshTyre", "TyreLife"]
+            ].drop_duplicates()
+
+            # Sorter etter sjåfør og rundnummer
+            return tyre_info.sort_values(["Driver", "LapNumber"])
+        except Exception as e:
+            print(f"Feil ved henting av dekkdata: {e}")
+            return None
+
+    def get_tyre_degradation(self, driver: str) -> Optional[pd.DataFrame]:
+        """
+        Analyserer dekkdegradeing for en sjåfør
+
+        Args:
+            driver: Sjåførens navn eller 3-bokstav-kode
+
+        Returns:
+            DataFrame med degradering per dekk-set
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            driver_laps = self.current_session.laps.pick_driver(driver)
+
+            # Grupper etter dekk-type
+            degradation = []
+            for compound in driver_laps["Compound"].unique():
+                compound_laps = driver_laps[driver_laps["Compound"] == compound].sort_values(
+                    "LapNumber"
+                )
+                if len(compound_laps) > 0:
+                    lap_times = compound_laps["LapTime"].dt.total_seconds()
+                    degradation.append(
+                        {
+                            "Driver": driver,
+                            "Compound": compound,
+                            "Num_Laps": len(compound_laps),
+                            "First_Lap_Time": lap_times.iloc[0],
+                            "Last_Lap_Time": lap_times.iloc[-1],
+                            "Degradation": lap_times.iloc[-1] - lap_times.iloc[0],
+                            "Avg_Lap_Time": lap_times.mean(),
+                        }
+                    )
+            return pd.DataFrame(degradation)
+        except Exception as e:
+            print(f"Feil ved analyse av dekkdegradeing: {e}")
+            return None
+
+    def compare_drivers_lap_times(self, drivers: List[str]) -> Optional[pd.DataFrame]:
+        """
+        Sammenligner rundetider mellom flere sjåfører
+
+        Args:
+            drivers: Liste med sjåfører å sammenligne
+
+        Returns:
+            DataFrame med sammenlignbare data
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            comparison = []
+            for driver in drivers:
+                driver_laps = self.current_session.laps.pick_driver(driver)
+                if len(driver_laps) > 0:
+                    fastest = driver_laps.pick_fastest()
+                    avg_lap_time = (
+                        driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
+                        .dt.total_seconds()
+                        .mean()
+                    )
+                    comparison.append(
+                        {
+                            "Driver": driver,
+                            "Fastest_Lap": fastest["LapTime"],
+                            "Avg_Lap_Time": pd.Timedelta(seconds=avg_lap_time),
+                            "Total_Laps": len(driver_laps),
+                            "DNF": driver_laps["Status"].iloc[-1] != "Finished",
+                        }
+                    )
+            return pd.DataFrame(comparison)
+        except Exception as e:
+            print(f"Feil ved sammenligning av rundetider: {e}")
+            return None
+
+    def get_lap_progression(self, driver: str) -> Optional[pd.DataFrame]:
+        """
+        Henter rundeprogresjonen for en sjåfør gjennom løpet
+
+        Args:
+            driver: Sjåførens navn eller 3-bokstav-kode
+
+        Returns:
+            DataFrame med rundeprogresjon
+        """
+        if self.current_session is None:
+            print("Ingen sesjon lastet")
+            return None
+
+        try:
+            driver_laps = self.current_session.laps.pick_driver(driver).sort_values("LapNumber")
+            return driver_laps[
+                [
+                    "LapNumber",
+                    "LapTime",
+                    "Compound",
+                    "FreshTyre",
+                    "TyreLife",
+                    "PitInTime",
+                    "PitOutTime",
+                ]
+            ]
+        except Exception as e:
+            print(f"Feil ved henting av rundeprogresjonen: {e}")
+            return None
