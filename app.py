@@ -205,13 +205,17 @@ with tab2:
 
         with col2:
             lap_numbers = app.get_lap_times_by_driver(selected_driver)
-            if lap_numbers is not None:
-                lap_num = st.number_input(
-                    "Lap Number (leave blank for fastest):",
-                    min_value=1,
-                    max_value=int(lap_numbers["LapNumber"].max()),
-                    value=None
-                )
+            if lap_numbers is not None and not lap_numbers.empty:
+                max_lap = lap_numbers["LapNumber"].max()
+                if pd.notna(max_lap):
+                    lap_num = st.number_input(
+                        "Lap Number (leave blank for fastest):",
+                        min_value=1,
+                        max_value=int(max_lap),
+                        value=None
+                    )
+                else:
+                    lap_num = None
             else:
                 lap_num = None
 
