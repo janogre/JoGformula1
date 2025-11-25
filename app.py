@@ -419,6 +419,7 @@ with tab6:
         st.session_state.race_running = False
         st.session_state.race_time = 0
         st.session_state.race_start_time = None
+        st.session_state.race_time_initialized = False
 
     col1, col2 = st.columns([2, 1])
 
@@ -444,7 +445,10 @@ with tab6:
                     value=0,
                     step=1
                 )
-                st.session_state.race_time = start_minutes * 60
+
+                # Only update race_time when not running
+                if not st.session_state.race_running:
+                    st.session_state.race_time = start_minutes * 60
 
                 # Control buttons
                 col_btn1, col_btn2, col_btn3 = st.columns(3)
