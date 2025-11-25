@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from src.fastf1_app import F1RaceDataApp
 import logging
+from datetime import datetime
 
 # Disable FastF1 logging noise
 logging.getLogger("fastf1").setLevel(logging.WARNING)
@@ -58,11 +59,12 @@ def get_events(year):
 # Sidebar - Session Selector
 st.sidebar.title("🏁 F1 Session Selector")
 
+current_year = datetime.now().year
 year = st.sidebar.number_input(
     "Select Year:",
     min_value=2018,
-    max_value=2024,
-    value=2024,
+    max_value=current_year,
+    value=current_year,
     step=1
 )
 
