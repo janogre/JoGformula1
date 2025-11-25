@@ -1,0 +1,411 @@
+"""
+Formula 1 Race Data App - Streamlit Web Interface
+Interactive visualizations and analysis of F1 race data
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from src.fastf1_app import F1RaceDataApp
+import logging
+
+# Disable FastF1 logging noise
+logging.getLogger("fastf1").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
+
+# Page configuration
+st.set_page_config(
+    page_title="F1 Race Data Analysis",
+    page_icon="🏎️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+<style>
+    .main {
+        padding: 0rem 1rem;
+    }
+    h1 {
+        color: #E10600;
+    }
+    h2 {
+        color: #E10600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+@st.cache_resource
+def get_app():
+    """Cache the F1RaceDataApp instance"""
+    return F1RaceDataApp()
+
+@st.cache_data
+def load_session(year, grand_prix, session_type):
+    """Cache loaded session data"""
+    app = get_app()
+    app.load_session(year, grand_prix, session_type)
+    return app
+
+@st.cache_data
+def get_events(year):
+    """Cache available events for a year"""
+    app = get_app()
+    return app.list_available_events(year)
+
+# Sidebar - Session Selector
+st.sidebar.title("🏁 F1 Session Selector")
+
+year = st.sidebar.number_input(
+    "Select Year:",
+    min_value=2018,
+    max_value=2024,
+    value=2024,
+    step=1
+)
+
+session_type_map = {"Practice 1": "FP1", "Practice 2": "FP2", "Practice 3": "FP3",
+                    "Qualifying": "Q", "Race": "R"}
+session_display = st.sidebar.selectbox(
+    "Select Session Type:",
+    list(session_type_map.keys()),
+    index=4
+)
+session_type = session_type_map[session_display]
+
+# Get available events
+try:
+    events = get_events(year)
+    if events is not None:
+        event_names = events["EventName"].tolist()
+        selected_event = st.sidebar.selectbox(
+            "Select Grand Prix:",
+            event_names,
+            index=len(event_names) - 1
+        )
+    else:
+        st.sidebar.error("Could not load events")
+        st.stop()
+except Exception as e:
+    st.sidebar.error(f"Error loading events: {e}")
+    st.stop()
+
+# Load session
+try:
+    with st.spinner("Loading session data..."):
+        app = load_session(year, selected_event, session_type)
+except Exception as e:
+    st.error(f"Error loading session: {e}")
+    st.stop()
+
+# Session Information
+st.title("🏎️ Formula 1 Race Data Analysis")
+
+col1, col2, col3, col4 = st.columns(4)
+session_info = app.get_session_info()
+
+if session_info:
+    with col1:
+        st.metric("Event", session_info.get("Event", "N/A"))
+    with col2:
+        st.metric("Location", session_info.get("Location", "N/A"))
+    with col3:
+        st.metric("Country", session_info.get("Country", "N/A"))
+    with col4:
+        st.metric("Session Type", session_info.get("Session Type", "N/A"))
+
+st.divider()
+
+# Tabs for different analyses
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["📊 Lap Times", "🏁 Telemetry", "🛣️ Track Position", "🛞 Tyre Data", "👥 Driver Comparison"]
+)
+
+# ==================== TAB 1: LAP TIMES ====================
+with tab1:
+    st.header("Lap Times Analysis")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # Get available drivers
+        if app.current_session is not None:
+            drivers = sorted(app.current_session.drivers)
+            selected_drivers = st.multiselect(
+                "Select Drivers to Compare:",
+                drivers,
+                default=drivers[:3] if len(drivers) >= 3 else drivers
+            )
+
+            if selected_drivers:
+                # Lap times comparison chart
+                fig_data = []
+                for driver in selected_drivers:
+                    lap_times = app.get_lap_times_by_driver(driver)
+                    if lap_times is not None and not lap_times.empty:
+                        lap_time_sec = lap_times["LapTime"].dt.total_seconds()
+                        fig_data.append({
+                            "Driver": [driver] * len(lap_times),
+                            "Lap": lap_times["LapNumber"].values,
+                            "Time": lap_time_sec.values,
+                            "Compound": lap_times["Compound"].values
+                        })
+
+                if fig_data:
+                    fig = go.Figure()
+                    colors = px.colors.qualitative.Plotly
+                    for idx, data in enumerate(fig_data):
+                        color = colors[idx % len(colors)]
+                        fig.add_trace(go.Scatter(
+                            x=data["Lap"],
+                            y=data["Time"],
+                            mode='lines+markers',
+                            name=data["Driver"][0],
+                            line=dict(color=color, width=2),
+                            marker=dict(size=4)
+                        ))
+
+                    fig.update_layout(
+                        title="Lap Times Progression",
+                        xaxis_title="Lap Number",
+                        yaxis_title="Lap Time (seconds)",
+                        height=500,
+                        hovermode='x unified'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        # Driver comparison metrics
+        if selected_drivers:
+            comparison = app.compare_drivers_lap_times(selected_drivers)
+            if comparison is not None and not comparison.empty:
+                st.subheader("Performance Metrics")
+
+                # Format for display
+                display_data = comparison.copy()
+                display_data["Fastest_Lap"] = display_data["Fastest_Lap"].astype(str)
+                display_data["Avg_Lap_Time"] = display_data["Avg_Lap_Time"].astype(str)
+
+                st.dataframe(display_data[["Driver", "Fastest_Lap", "Avg_Lap_Time", "Total_Laps", "DNF"]],
+                           use_container_width=True)
+
+# ==================== TAB 2: TELEMETRY ====================
+with tab2:
+    st.header("Telemetry Analysis")
+
+    if app.current_session is not None:
+        drivers = sorted(app.current_session.drivers)
+        selected_driver = st.selectbox("Select Driver:", drivers, key="telemetry_driver")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col2:
+            lap_numbers = app.get_lap_times_by_driver(selected_driver)
+            if lap_numbers is not None:
+                lap_num = st.number_input(
+                    "Lap Number (leave blank for fastest):",
+                    min_value=1,
+                    max_value=int(lap_numbers["LapNumber"].max()),
+                    value=None
+                )
+            else:
+                lap_num = None
+
+        with col1:
+            telemetry = app.get_driver_telemetry_full(selected_driver, lap_num)
+
+            if telemetry is not None and not telemetry.empty:
+                # Create telemetry plot
+                fig = go.Figure()
+
+                if "Speed" in telemetry.columns:
+                    fig.add_trace(go.Scatter(
+                        y=telemetry["Speed"],
+                        name="Speed (km/h)",
+                        line=dict(color="blue"),
+                        yaxis="y1"
+                    ))
+
+                if "Throttle" in telemetry.columns:
+                    fig.add_trace(go.Scatter(
+                        y=telemetry["Throttle"] * 100,
+                        name="Throttle (%)",
+                        line=dict(color="green", dash="dash"),
+                        yaxis="y2"
+                    ))
+
+                if "Brake" in telemetry.columns:
+                    fig.add_trace(go.Scatter(
+                        y=telemetry["Brake"] * 100,
+                        name="Brake (%)",
+                        line=dict(color="red", dash="dash"),
+                        yaxis="y2"
+                    ))
+
+                fig.update_layout(
+                    title=f"Telemetry - {selected_driver}",
+                    height=500,
+                    hovermode='x unified',
+                    yaxis=dict(title="Speed (km/h)", position=0),
+                    yaxis2=dict(title="Throttle/Brake (%)", overlaying="y", side="right")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No telemetry data available for this driver/lap")
+
+# ==================== TAB 3: TRACK POSITION ====================
+with tab3:
+    st.header("Track Position Analysis")
+
+    if app.current_session is not None:
+        drivers = sorted(app.current_session.drivers)
+        selected_drivers_track = st.multiselect(
+            "Select Drivers:",
+            drivers,
+            default=drivers[:3] if len(drivers) >= 3 else drivers,
+            key="track_position"
+        )
+
+        if selected_drivers_track:
+            fig = go.Figure()
+            colors = px.colors.qualitative.Plotly
+
+            for idx, driver in enumerate(selected_drivers_track):
+                telemetry = app.get_driver_telemetry_full(driver)
+                if telemetry is not None and "X" in telemetry.columns and "Y" in telemetry.columns:
+                    color = colors[idx % len(colors)]
+                    fig.add_trace(go.Scatter(
+                        x=telemetry["X"],
+                        y=telemetry["Y"],
+                        mode='lines',
+                        name=driver,
+                        line=dict(color=color, width=2),
+                        hovertemplate=f"{driver}<br>Speed: " + telemetry["Speed"].astype(str) + " km/h<extra></extra>"
+                    ))
+
+            fig.update_layout(
+                title="Track Position Comparison",
+                xaxis_title="X Position (m)",
+                yaxis_title="Y Position (m)",
+                height=600,
+                hovermode='closest',
+                showlegend=True
+            )
+            fig.update_yaxes(scaleanchor="x", scaleratio=1)
+            st.plotly_chart(fig, use_container_width=True)
+
+# ==================== TAB 4: TYRE DATA ====================
+with tab4:
+    st.header("Tyre Strategy and Degradation")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Tyre Strategy")
+        tyre_data = app.get_tyre_data()
+        if tyre_data is not None and not tyre_data.empty:
+            # Show tyre info for selected drivers
+            if app.current_session is not None:
+                selected_drivers_tyre = st.multiselect(
+                    "Select Drivers:",
+                    sorted(app.current_session.drivers),
+                    default=sorted(app.current_session.drivers)[:3],
+                    key="tyre_drivers"
+                )
+
+                if selected_drivers_tyre:
+                    tyre_subset = tyre_data[tyre_data["Driver"].isin(selected_drivers_tyre)]
+                    st.dataframe(
+                        tyre_subset[["Driver", "LapNumber", "Compound", "FreshTyre", "TyreLife"]],
+                        use_container_width=True,
+                        height=400
+                    )
+
+    with col2:
+        st.subheader("Tyre Degradation")
+        if app.current_session is not None:
+            selected_driver_deg = st.selectbox(
+                "Select Driver:",
+                sorted(app.current_session.drivers),
+                key="degradation_driver"
+            )
+
+            degradation = app.get_tyre_degradation(selected_driver_deg)
+            if degradation is not None and not degradation.empty:
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=degradation["Compound"],
+                    y=degradation["Degradation"],
+                    marker=dict(color=['red', 'yellow', 'cyan']),
+                    text=degradation["Degradation"].round(2),
+                    textposition='outside'
+                ))
+                fig.update_layout(
+                    title=f"Tyre Degradation - {selected_driver_deg}",
+                    xaxis_title="Compound",
+                    yaxis_title="Degradation (seconds)",
+                    height=400
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+# ==================== TAB 5: DRIVER COMPARISON ====================
+with tab5:
+    st.header("Driver Comparison Dashboard")
+
+    if app.current_session is not None:
+        drivers = sorted(app.current_session.drivers)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Select Drivers to Compare")
+            comparison_drivers = st.multiselect(
+                "Drivers:",
+                drivers,
+                default=drivers[:5] if len(drivers) >= 5 else drivers,
+                key="comparison_drivers"
+            )
+
+        with col2:
+            st.subheader("Performance Overview")
+
+        if comparison_drivers:
+            comparison = app.compare_drivers_lap_times(comparison_drivers)
+            if comparison is not None and not comparison.empty:
+                # Display metrics
+                col_fastest, col_avg, col_total = st.columns(3)
+
+                with col_fastest:
+                    st.metric(
+                        "Fastest Lap",
+                        comparison.loc[comparison["Fastest_Lap"].idxmin()]["Driver"]
+                    )
+
+                with col_avg:
+                    st.metric(
+                        "Most Consistent",
+                        comparison.loc[comparison["Avg_Lap_Time"].idxmin()]["Driver"]
+                    )
+
+                with col_total:
+                    st.metric(
+                        "Most Laps",
+                        comparison.loc[comparison["Total_Laps"].idxmax()]["Driver"]
+                    )
+
+                st.divider()
+
+                # Comparison table
+                display_comparison = comparison.copy()
+                display_comparison["Fastest_Lap"] = display_comparison["Fastest_Lap"].astype(str)
+                display_comparison["Avg_Lap_Time"] = display_comparison["Avg_Lap_Time"].astype(str)
+
+                st.dataframe(display_comparison, use_container_width=True)
+
+st.divider()
+st.markdown("""
+---
+**F1 Race Data App** | Powered by [FastF1](https://docs.fastf1.dev/) | Made with Streamlit
+""")
