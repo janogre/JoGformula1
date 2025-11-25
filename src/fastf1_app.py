@@ -74,12 +74,15 @@ class F1RaceDataApp:
             print("Ingen sesjon lastet")
             return None
 
-        # Finn sjåfør i sesjonen
-        drivers = self.current_session.drivers
-        print(f"Tilgjengelige sjåfører: {drivers}")
-
         try:
-            lap = self.current_session.laps.pick_driver(driver).pick_fastest()
+            driver_laps = self.current_session.laps.pick_drivers(driver)
+            if driver_laps.empty:
+                return None
+
+            lap = driver_laps.pick_fastest()
+            if lap is None or pd.isna(lap):
+                return None
+
             telemetry = lap.get_telemetry()
             return telemetry
         except Exception as e:
@@ -182,7 +185,7 @@ class F1RaceDataApp:
             return None
 
         try:
-            driver_laps = self.current_session.laps.pick_driver(driver)
+            driver_laps = self.current_session.laps.pick_drivers(driver)
             return driver_laps[
                 ["LapNumber", "LapTime", "Compound", "FreshTyre", "TyreLife"]
             ].sort_values("LapNumber")
@@ -208,12 +211,21 @@ class F1RaceDataApp:
             return None
 
         try:
-            driver_laps = self.current_session.laps.pick_driver(driver)
+            driver_laps = self.current_session.laps.pick_drivers(driver)
+
+            if driver_laps.empty:
+                return None
 
             if lap_number is not None:
-                lap = driver_laps[driver_laps["LapNumber"] == lap_number].iloc[0]
+                lap_rows = driver_laps[driver_laps["LapNumber"] == lap_number]
+                if lap_rows.empty:
+                    return None
+                lap = lap_rows.iloc[0]
             else:
                 lap = driver_laps.pick_fastest()
+
+            if lap is None or pd.isna(lap):
+                return None
 
             telemetry = lap.get_telemetry()
             # Konverter til km/h hvis nødvendig
@@ -241,12 +253,17 @@ class F1RaceDataApp:
 
         try:
             if driver is not None:
-                driver_laps = self.current_session.laps.pick_driver(driver)
+                driver_laps = self.current_session.laps.pick_drivers(driver)
+                if driver_laps.empty:
+                    return None
+
                 positions = []
                 for _, lap in driver_laps.iterrows():
                     try:
+                        if lap is None or pd.isna(lap):
+                            continue
                         telemetry = lap.get_telemetry()
-                        if "X" in telemetry.columns and "Y" in telemetry.columns:
+                        if telemetry is not None and "X" in telemetry.columns and "Y" in telemetry.columns:
                             positions.append(
                                 {
                                     "Driver": driver,
@@ -257,7 +274,7 @@ class F1RaceDataApp:
                             )
                     except:
                         pass
-                return pd.DataFrame(positions)
+                return pd.DataFrame(positions) if positions else None
             else:
                 # Hent for alle sjåfører
                 all_positions = []
@@ -265,7 +282,7 @@ class F1RaceDataApp:
                     pos = self.get_position_data(driver)
                     if pos is not None:
                         all_positions.append(pos)
-                return pd.concat(all_positions, ignore_index=True)
+                return pd.concat(all_positions, ignore_index=True) if all_positions else None
         except Exception as e:
             print(f"Feil ved henting av posisjonsdata: {e}")
             return None
@@ -308,7 +325,7 @@ class F1RaceDataApp:
             return None
 
         try:
-            driver_laps = self.current_session.laps.pick_driver(driver)
+            driver_laps = self.current_session.laps.pick_drivers(driver)
 
             # Grupper etter dekk-type
             degradation = []
@@ -351,24 +368,33 @@ class F1RaceDataApp:
         try:
             comparison = []
             for driver in drivers:
-                driver_laps = self.current_session.laps.pick_driver(driver)
+                driver_laps = self.current_session.laps.pick_drivers(driver)
                 if len(driver_laps) > 0:
                     fastest = driver_laps.pick_fastest()
+                    if fastest is None or pd.isna(fastest):
+                        continue
+
                     avg_lap_time = (
                         driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
                         .dt.total_seconds()
                         .mean()
                     )
+
+                    # Sjekk for Status kolonne
+                    dnf = False
+                    if "Status" in driver_laps.columns:
+                        dnf = driver_laps["Status"].iloc[-1] != "Finished"
+
                     comparison.append(
                         {
                             "Driver": driver,
                             "Fastest_Lap": fastest["LapTime"],
                             "Avg_Lap_Time": pd.Timedelta(seconds=avg_lap_time),
                             "Total_Laps": len(driver_laps),
-                            "DNF": driver_laps["Status"].iloc[-1] != "Finished",
+                            "DNF": dnf,
                         }
                     )
-            return pd.DataFrame(comparison)
+            return pd.DataFrame(comparison) if comparison else None
         except Exception as e:
             print(f"Feil ved sammenligning av rundetider: {e}")
             return None
@@ -388,7 +414,7 @@ class F1RaceDataApp:
             return None
 
         try:
-            driver_laps = self.current_session.laps.pick_driver(driver).sort_values("LapNumber")
+            driver_laps = self.current_session.laps.pick_drivers(driver).sort_values("LapNumber")
             return driver_laps[
                 [
                     "LapNumber",
