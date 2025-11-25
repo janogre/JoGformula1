@@ -412,24 +412,130 @@ with tab5:
 
 # ==================== TAB 6: RACE REPLAY ====================
 with tab6:
-    st.header("🎬 Race Replay with Live Data")
+    st.header("🎬 Race Replay - Live Data Simulation")
+
+    # Initialize session state for race replay
+    if "race_running" not in st.session_state:
+        st.session_state.race_running = False
+        st.session_state.race_time = 0
+        st.session_state.race_start_time = None
 
     col1, col2 = st.columns([2, 1])
 
+    with col2:
+        st.subheader("⏱️ Race Control")
+
+        # Get race duration estimate
+        lap_data = app.get_lap_data()
+        if lap_data is not None and not lap_data.empty:
+            avg_lap_time = lap_data["LapTime"].mean()
+            num_laps = lap_data["LapNumber"].max()
+            if pd.notna(num_laps) and pd.notna(avg_lap_time):
+                race_duration_seconds = int(num_laps * avg_lap_time.total_seconds())
+                race_duration_minutes = race_duration_seconds // 60
+
+                st.write(f"**Race Duration:** {race_duration_minutes} min")
+
+                # Start position selector
+                start_minutes = st.number_input(
+                    "Start at (minutes):",
+                    min_value=0,
+                    max_value=race_duration_minutes,
+                    value=0,
+                    step=1
+                )
+                st.session_state.race_time = start_minutes * 60
+
+                # Control buttons
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
+
+                with col_btn1:
+                    if st.button("▶️ Start", use_container_width=True):
+                        st.session_state.race_running = True
+                        st.session_state.race_start_time = datetime.now()
+
+                with col_btn2:
+                    if st.button("⏸️ Pause", use_container_width=True):
+                        st.session_state.race_running = False
+
+                with col_btn3:
+                    if st.button("⏹️ Stop", use_container_width=True):
+                        st.session_state.race_running = False
+                        st.session_state.race_time = 0
+
+                st.divider()
+
+                # Current time display
+                if st.session_state.race_running and st.session_state.race_start_time:
+                    elapsed = (datetime.now() - st.session_state.race_start_time).total_seconds()
+                    st.session_state.race_time += elapsed
+                    st.session_state.race_start_time = datetime.now()
+
+                # Ensure race time doesn't exceed duration
+                if st.session_state.race_time > race_duration_seconds:
+                    st.session_state.race_time = race_duration_seconds
+                    st.session_state.race_running = False
+
+                minutes = int(st.session_state.race_time) // 60
+                seconds = int(st.session_state.race_time) % 60
+
+                st.metric("Current Time", f"{minutes:02d}:{seconds:02d}")
+
+                # Manual timeline slider
+                st.write("**Manual Navigation:**")
+                slider_time = st.slider(
+                    "Timeline:",
+                    min_value=0,
+                    max_value=race_duration_seconds,
+                    value=int(st.session_state.race_time),
+                    step=1,
+                    label_visibility="collapsed"
+                )
+
+                if slider_time != st.session_state.race_time:
+                    st.session_state.race_time = slider_time
+                    st.session_state.race_running = False
+
+                # Progress bar
+                progress = st.session_state.race_time / race_duration_seconds
+                st.progress(progress)
+
+                st.divider()
+
+                # Race status at current time
+                st.subheader("📊 Race Status")
+
+                if app.current_session is not None:
+                    standings = app.get_driver_standings()
+                    if standings is not None and not standings.empty:
+                        st.dataframe(standings.head(5), use_container_width=True)
+
+                    fastest = app.get_fastest_lap_data()
+                    if fastest:
+                        st.metric(
+                            "Fastest Lap",
+                            f"{fastest['Driver']}"
+                        )
+
+                # Auto-refresh when racing
+                if st.session_state.race_running:
+                    import time
+                    time.sleep(0.1)
+                    st.rerun()
+
+            else:
+                st.warning("Not enough data to estimate race duration")
+        else:
+            st.warning("No lap data available for this session")
+
     with col1:
-        st.subheader("Video Stream")
+        st.subheader("📺 TV Stream")
         st.info("""
-        🎥 **Race Video Playback**
+        **Your TV Display**
 
-        To sync with video:
-        1. Paste a YouTube URL or use your own video file
-        2. Use the timeline slider to navigate
-        3. Data will update to match the selected time
+        Play the race video on your TV and use the controls on the right to synchronize with the data!
 
-        **Note:** You can find race videos on:
-        - F1TV
-        - YouTube (official F1 channel or broadcasters)
-        - ESPN+
+        The data shown will reflect what happened at that point in the race.
         """)
 
         # Video source input
@@ -445,7 +551,6 @@ with tab6:
                 placeholder="https://www.youtube.com/watch?v=..."
             )
             if youtube_url:
-                # Extract video ID from YouTube URL
                 if "youtube.com" in youtube_url or "youtu.be" in youtube_url:
                     try:
                         if "youtube.com" in youtube_url:
@@ -455,7 +560,7 @@ with tab6:
 
                         embed_url = f"https://www.youtube.com/embed/{video_id}"
                         st.markdown(
-                            f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>',
+                            f'<iframe width="100%" height="600" src="{embed_url}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>',
                             unsafe_allow_html=True
                         )
                     except:
@@ -469,59 +574,6 @@ with tab6:
             )
             if video_file:
                 st.video(video_file)
-
-    with col2:
-        st.subheader("Timeline & Data")
-
-        # Get race duration estimate from lap data
-        lap_data = app.get_lap_data()
-        if lap_data is not None and not lap_data.empty:
-            # Estimate race duration (rough)
-            avg_lap_time = lap_data["LapTime"].mean()
-            num_laps = lap_data["LapNumber"].max()
-            if pd.notna(num_laps) and pd.notna(avg_lap_time):
-                race_duration_seconds = int(num_laps * avg_lap_time.total_seconds())
-                race_duration_minutes = race_duration_seconds // 60
-
-                # Timeline slider
-                st.write(f"**Estimated Race Duration:** {race_duration_minutes} minutes")
-
-                current_time = st.slider(
-                    "Race Timeline:",
-                    min_value=0,
-                    max_value=race_duration_seconds,
-                    value=0,
-                    step=5,
-                    label_visibility="collapsed"
-                )
-
-                # Display current time
-                minutes = current_time // 60
-                seconds = current_time % 60
-                st.metric("Current Time", f"{minutes:02d}:{seconds:02d}")
-
-                st.divider()
-
-                # Show data for current time
-                st.subheader("Race Status")
-
-                if app.current_session is not None:
-                    # Get standings at this point in time
-                    standings = app.get_driver_standings()
-                    if standings is not None and not standings.empty:
-                        st.dataframe(standings.head(5), use_container_width=True)
-
-                    # Show fastest lap so far
-                    fastest = app.get_fastest_lap_data()
-                    if fastest:
-                        st.metric(
-                            "Fastest Lap",
-                            f"{fastest['Driver']} - {fastest['Time']}"
-                        )
-            else:
-                st.warning("Not enough data to estimate race duration")
-        else:
-            st.warning("No lap data available for this session")
 
 st.divider()
 st.markdown("""
