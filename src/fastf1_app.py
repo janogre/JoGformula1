@@ -24,7 +24,7 @@ class F1RaceDataApp:
 
     def load_session(
         self, year: int, grand_prix: str, session_type: str = "R"
-    ) -> Optional[fastf1.Session]:
+    ):
         """
         Laster en F1-sesjon
 
