@@ -123,11 +123,7 @@ class F1RaceDataApp:
             "Location": session.event["Location"],
             "Country": session.event["Country"],
             "Date": session.date,
-            "Session Type": session.session_type,
-            "Weather": {
-                "Track Temp": session.track_status,
-                "Air Temp": session.weather,
-            },
+            "Session Type": session.name,
         }
 
     def get_fastest_lap_data(self) -> Optional[Dict]:
