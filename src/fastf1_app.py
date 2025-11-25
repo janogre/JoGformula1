@@ -99,9 +99,10 @@ class F1RaceDataApp:
 
         try:
             results = self.current_session.results
-            return results[
-                ["Driver", "TeamName", "Position", "Status", "Points"]
-            ].sort_values("Position")
+            # Velg tilgjengelige kolonner
+            cols = [col for col in ["Abbreviation", "TeamName", "Position", "Status", "Points"]
+                    if col in results.columns]
+            return results[cols].sort_values("Position")
         except Exception as e:
             print(f"Feil ved henting av stillingsstatus: {e}")
             return None
