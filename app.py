@@ -121,8 +121,8 @@ if session_info:
 st.divider()
 
 # Tabs for different analyses
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📊 Lap Times", "🏁 Telemetry", "🛣️ Track Position", "🛞 Tyre Data", "👥 Driver Comparison"]
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📊 Lap Times", "🏁 Telemetry", "🛣️ Track Position", "🛞 Tyre Data", "👥 Driver Comparison", "🎬 Race Replay"]
 )
 
 # ==================== TAB 1: LAP TIMES ====================
@@ -409,6 +409,119 @@ with tab5:
                 display_comparison["Avg_Lap_Time"] = display_comparison["Avg_Lap_Time"].astype(str)
 
                 st.dataframe(display_comparison, use_container_width=True)
+
+# ==================== TAB 6: RACE REPLAY ====================
+with tab6:
+    st.header("🎬 Race Replay with Live Data")
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.subheader("Video Stream")
+        st.info("""
+        🎥 **Race Video Playback**
+
+        To sync with video:
+        1. Paste a YouTube URL or use your own video file
+        2. Use the timeline slider to navigate
+        3. Data will update to match the selected time
+
+        **Note:** You can find race videos on:
+        - F1TV
+        - YouTube (official F1 channel or broadcasters)
+        - ESPN+
+        """)
+
+        # Video source input
+        video_type = st.radio(
+            "Video Source:",
+            ["YouTube URL", "Local Video File"],
+            horizontal=True
+        )
+
+        if video_type == "YouTube URL":
+            youtube_url = st.text_input(
+                "Enter YouTube URL:",
+                placeholder="https://www.youtube.com/watch?v=..."
+            )
+            if youtube_url:
+                # Extract video ID from YouTube URL
+                if "youtube.com" in youtube_url or "youtu.be" in youtube_url:
+                    try:
+                        if "youtube.com" in youtube_url:
+                            video_id = youtube_url.split("v=")[1].split("&")[0]
+                        else:
+                            video_id = youtube_url.split("/")[-1].split("?")[0]
+
+                        embed_url = f"https://www.youtube.com/embed/{video_id}"
+                        st.markdown(
+                            f'<iframe width="100%" height="400" src="{embed_url}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>',
+                            unsafe_allow_html=True
+                        )
+                    except:
+                        st.error("Invalid YouTube URL. Please check and try again.")
+                else:
+                    st.error("Please enter a valid YouTube URL")
+        else:
+            video_file = st.file_uploader(
+                "Upload video file:",
+                type=["mp4", "webm", "avi", "mov"]
+            )
+            if video_file:
+                st.video(video_file)
+
+    with col2:
+        st.subheader("Timeline & Data")
+
+        # Get race duration estimate from lap data
+        lap_data = app.get_lap_data()
+        if lap_data is not None and not lap_data.empty:
+            # Estimate race duration (rough)
+            avg_lap_time = lap_data["LapTime"].mean()
+            num_laps = lap_data["LapNumber"].max()
+            if pd.notna(num_laps) and pd.notna(avg_lap_time):
+                race_duration_seconds = int(num_laps * avg_lap_time.total_seconds())
+                race_duration_minutes = race_duration_seconds // 60
+
+                # Timeline slider
+                st.write(f"**Estimated Race Duration:** {race_duration_minutes} minutes")
+
+                current_time = st.slider(
+                    "Race Timeline:",
+                    min_value=0,
+                    max_value=race_duration_seconds,
+                    value=0,
+                    step=5,
+                    label_visibility="collapsed"
+                )
+
+                # Display current time
+                minutes = current_time // 60
+                seconds = current_time % 60
+                st.metric("Current Time", f"{minutes:02d}:{seconds:02d}")
+
+                st.divider()
+
+                # Show data for current time
+                st.subheader("Race Status")
+
+                if app.current_session is not None:
+                    # Get standings at this point in time
+                    standings = app.get_driver_standings()
+                    if standings is not None and not standings.empty:
+                        st.dataframe(standings.head(5), use_container_width=True)
+
+                    # Show fastest lap so far
+                    fastest = app.get_fastest_lap_data()
+                    if fastest:
+                        st.metric(
+                            "Fastest Lap",
+                            f"{fastest['Driver']} - {fastest['Time']}"
+                        )
+            else:
+                st.warning("Not enough data to estimate race duration")
+        else:
+            st.warning("No lap data available for this session")
 
 st.divider()
 st.markdown("""
