@@ -506,16 +506,29 @@ with tab6:
                 st.subheader("📊 Race Status")
 
                 if app.current_session is not None:
-                    standings = app.get_driver_standings()
-                    if standings is not None and not standings.empty:
-                        st.dataframe(standings.head(5), use_container_width=True)
+                    try:
+                        standings = app.get_driver_standings()
+                        if standings is not None and not standings.empty:
+                            st.write(f"**{len(standings)} Drivers Finishing**")
+                            st.dataframe(standings.head(10), use_container_width=True)
+                        else:
+                            st.info("No standings data available yet")
+                    except Exception as e:
+                        st.warning(f"Could not load standings: {e}")
 
-                    fastest = app.get_fastest_lap_data()
-                    if fastest:
-                        st.metric(
-                            "Fastest Lap",
-                            f"{fastest['Driver']}"
-                        )
+                    try:
+                        fastest = app.get_fastest_lap_data()
+                        if fastest:
+                            st.metric(
+                                "Fastest Lap",
+                                f"{fastest['Driver']} - {fastest['Time']}"
+                            )
+                        else:
+                            st.info("No fastest lap data available")
+                    except Exception as e:
+                        st.warning(f"Could not load fastest lap: {e}")
+                else:
+                    st.error("Session not loaded properly")
 
                 # Auto-refresh when racing
                 if st.session_state.race_running:
