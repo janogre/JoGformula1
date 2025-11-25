@@ -80,7 +80,7 @@ class F1RaceDataApp:
                 return None
 
             lap = driver_laps.pick_fastest()
-            if lap is None or pd.isna(lap):
+            if lap is None:
                 return None
 
             telemetry = lap.get_telemetry()
@@ -143,6 +143,9 @@ class F1RaceDataApp:
 
         try:
             fastest_lap = self.current_session.laps.pick_fastest()
+            if fastest_lap is None:
+                return None
+
             return {
                 "Driver": fastest_lap["Driver"],
                 "Time": fastest_lap["LapTime"],
@@ -186,6 +189,8 @@ class F1RaceDataApp:
 
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
+            if driver_laps.empty:
+                return None
             return driver_laps[
                 ["LapNumber", "LapTime", "Compound", "FreshTyre", "TyreLife"]
             ].sort_values("LapNumber")
@@ -224,7 +229,7 @@ class F1RaceDataApp:
             else:
                 lap = driver_laps.pick_fastest()
 
-            if lap is None or pd.isna(lap):
+            if lap is None:
                 return None
 
             telemetry = lap.get_telemetry()
@@ -260,8 +265,6 @@ class F1RaceDataApp:
                 positions = []
                 for _, lap in driver_laps.iterrows():
                     try:
-                        if lap is None or pd.isna(lap):
-                            continue
                         telemetry = lap.get_telemetry()
                         if telemetry is not None and "X" in telemetry.columns and "Y" in telemetry.columns:
                             positions.append(
@@ -326,6 +329,8 @@ class F1RaceDataApp:
 
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
+            if driver_laps.empty:
+                return None
 
             # Grupper etter dekk-type
             degradation = []
@@ -346,7 +351,7 @@ class F1RaceDataApp:
                             "Avg_Lap_Time": lap_times.mean(),
                         }
                     )
-            return pd.DataFrame(degradation)
+            return pd.DataFrame(degradation) if degradation else None
         except Exception as e:
             print(f"Feil ved analyse av dekkdegradeing: {e}")
             return None
@@ -371,14 +376,21 @@ class F1RaceDataApp:
                 driver_laps = self.current_session.laps.pick_drivers(driver)
                 if len(driver_laps) > 0:
                     fastest = driver_laps.pick_fastest()
-                    if fastest is None or pd.isna(fastest):
+                    if fastest is None:
                         continue
 
-                    avg_lap_time = (
-                        driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
-                        .dt.total_seconds()
-                        .mean()
-                    )
+                    try:
+                        avg_lap_time = (
+                            driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
+                            .dt.total_seconds()
+                            .mean()
+                        )
+                    except:
+                        avg_lap_time = (
+                            driver_laps["LapTime"]
+                            .dt.total_seconds()
+                            .mean()
+                        )
 
                     # Sjekk for Status kolonne
                     dnf = False

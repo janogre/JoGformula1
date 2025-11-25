@@ -176,7 +176,7 @@ with tab1:
                         height=500,
                         hovermode='x unified'
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
 
     with col2:
         # Driver comparison metrics
@@ -190,8 +190,7 @@ with tab1:
                 display_data["Fastest_Lap"] = display_data["Fastest_Lap"].astype(str)
                 display_data["Avg_Lap_Time"] = display_data["Avg_Lap_Time"].astype(str)
 
-                st.dataframe(display_data[["Driver", "Fastest_Lap", "Avg_Lap_Time", "Total_Laps", "DNF"]],
-                           use_container_width=True)
+                st.dataframe(display_data[["Driver", "Fastest_Lap", "Avg_Lap_Time", "Total_Laps", "DNF"]])
 
 # ==================== TAB 2: TELEMETRY ====================
 with tab2:
@@ -257,7 +256,7 @@ with tab2:
                     yaxis=dict(title="Speed (km/h)", position=0),
                     yaxis2=dict(title="Throttle/Brake (%)", overlaying="y", side="right")
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
             else:
                 st.warning("No telemetry data available for this driver/lap")
 
@@ -300,7 +299,7 @@ with tab3:
                 showlegend=True
             )
             fig.update_yaxes(scaleanchor="x", scaleratio=1)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig)
 
 # ==================== TAB 4: TYRE DATA ====================
 with tab4:
@@ -325,7 +324,6 @@ with tab4:
                     tyre_subset = tyre_data[tyre_data["Driver"].isin(selected_drivers_tyre)]
                     st.dataframe(
                         tyre_subset[["Driver", "LapNumber", "Compound", "FreshTyre", "TyreLife"]],
-                        use_container_width=True,
                         height=400
                     )
 
@@ -354,7 +352,7 @@ with tab4:
                     yaxis_title="Degradation (seconds)",
                     height=400
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
 
 # ==================== TAB 5: DRIVER COMPARISON ====================
 with tab5:
@@ -408,7 +406,7 @@ with tab5:
                 display_comparison["Fastest_Lap"] = display_comparison["Fastest_Lap"].astype(str)
                 display_comparison["Avg_Lap_Time"] = display_comparison["Avg_Lap_Time"].astype(str)
 
-                st.dataframe(display_comparison, use_container_width=True)
+                st.dataframe(display_comparison)
 
 # ==================== TAB 6: RACE REPLAY ====================
 with tab6:
@@ -454,16 +452,16 @@ with tab6:
                 col_btn1, col_btn2, col_btn3 = st.columns(3)
 
                 with col_btn1:
-                    if st.button("▶️ Start", use_container_width=True):
+                    if st.button("▶️ Start"):
                         st.session_state.race_running = True
                         st.session_state.race_start_time = datetime.now()
 
                 with col_btn2:
-                    if st.button("⏸️ Pause", use_container_width=True):
+                    if st.button("⏸️ Pause"):
                         st.session_state.race_running = False
 
                 with col_btn3:
-                    if st.button("⏹️ Stop", use_container_width=True):
+                    if st.button("⏹️ Stop"):
                         st.session_state.race_running = False
                         st.session_state.race_time = 0
 
@@ -514,7 +512,7 @@ with tab6:
                         standings = app.get_driver_standings()
                         if standings is not None and not standings.empty:
                             st.write(f"**{len(standings)} Drivers Finishing**")
-                            st.dataframe(standings.head(10), use_container_width=True)
+                            st.dataframe(standings.head(10))
                         else:
                             st.info("No standings data available yet")
                     except Exception as e:
