@@ -76,7 +76,7 @@ class F1RaceDataApp:
 
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
-            if driver_laps.empty:
+            if driver_laps is None or driver_laps.empty:
                 return None
 
             lap = driver_laps.pick_fastest()
@@ -189,7 +189,7 @@ class F1RaceDataApp:
 
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
-            if driver_laps.empty:
+            if driver_laps is None or driver_laps.empty:
                 return None
             return driver_laps[
                 ["LapNumber", "LapTime", "Compound", "FreshTyre", "TyreLife"]
@@ -218,7 +218,7 @@ class F1RaceDataApp:
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
 
-            if driver_laps.empty:
+            if driver_laps is None or driver_laps.empty:
                 return None
 
             if lap_number is not None:
@@ -259,7 +259,7 @@ class F1RaceDataApp:
         try:
             if driver is not None:
                 driver_laps = self.current_session.laps.pick_drivers(driver)
-                if driver_laps.empty:
+                if driver_laps is None or driver_laps.empty:
                     return None
 
                 positions = []
@@ -329,7 +329,7 @@ class F1RaceDataApp:
 
         try:
             driver_laps = self.current_session.laps.pick_drivers(driver)
-            if driver_laps.empty:
+            if driver_laps is None or driver_laps.empty:
                 return None
 
             # Grupper etter dekk-type
@@ -374,38 +374,39 @@ class F1RaceDataApp:
             comparison = []
             for driver in drivers:
                 driver_laps = self.current_session.laps.pick_drivers(driver)
-                if len(driver_laps) > 0:
-                    fastest = driver_laps.pick_fastest()
-                    if fastest is None:
-                        continue
+                if driver_laps is None or len(driver_laps) == 0:
+                    continue
+                fastest = driver_laps.pick_fastest()
+                if fastest is None:
+                    continue
 
-                    try:
-                        avg_lap_time = (
-                            driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
-                            .dt.total_seconds()
-                            .mean()
-                        )
-                    except:
-                        avg_lap_time = (
-                            driver_laps["LapTime"]
-                            .dt.total_seconds()
-                            .mean()
-                        )
-
-                    # Sjekk for Status kolonne
-                    dnf = False
-                    if "Status" in driver_laps.columns:
-                        dnf = driver_laps["Status"].iloc[-1] != "Finished"
-
-                    comparison.append(
-                        {
-                            "Driver": driver,
-                            "Fastest_Lap": fastest["LapTime"],
-                            "Avg_Lap_Time": pd.Timedelta(seconds=avg_lap_time),
-                            "Total_Laps": len(driver_laps),
-                            "DNF": dnf,
-                        }
+                try:
+                    avg_lap_time = (
+                        driver_laps[driver_laps["IsAccurate"] == True]["LapTime"]
+                        .dt.total_seconds()
+                        .mean()
                     )
+                except:
+                    avg_lap_time = (
+                        driver_laps["LapTime"]
+                        .dt.total_seconds()
+                        .mean()
+                    )
+
+                # Sjekk for Status kolonne
+                dnf = False
+                if "Status" in driver_laps.columns:
+                    dnf = driver_laps["Status"].iloc[-1] != "Finished"
+
+                comparison.append(
+                    {
+                        "Driver": driver,
+                        "Fastest_Lap": fastest["LapTime"],
+                        "Avg_Lap_Time": pd.Timedelta(seconds=avg_lap_time),
+                        "Total_Laps": len(driver_laps),
+                        "DNF": dnf,
+                    }
+                )
             return pd.DataFrame(comparison) if comparison else None
         except Exception as e:
             print(f"Feil ved sammenligning av rundetider: {e}")
