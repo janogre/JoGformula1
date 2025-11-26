@@ -82,10 +82,16 @@ try:
     events = get_events(year)
     if events is not None:
         event_names = events["EventName"].tolist()
+        # Find Australia index, default to first event if not found
+        australia_index = 0
+        for i, event in enumerate(event_names):
+            if "Australia" in event:
+                australia_index = i
+                break
         selected_event = st.sidebar.selectbox(
             "Select Grand Prix:",
             event_names,
-            index=len(event_names) - 1
+            index=australia_index
         )
     else:
         st.sidebar.error("Could not load events")
