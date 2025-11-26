@@ -33,11 +33,16 @@ class F1RaceDataApp:
             return []
 
         try:
-            # FastF1 session.drivers gir forkortelserelefone
-            drivers = list(self.current_session.drivers)
-            # Sørg for at de er strenger og sorter dem
-            drivers = sorted([str(d) for d in drivers if d])
-            return drivers
+            # Hent unike driver-forkortelser fra laps-datasettet
+            laps = self.current_session.laps
+            if laps is None or laps.empty:
+                return []
+
+            # "Driver" kolonnen inneholder forkortelsene (VER, LEC, ALO, etc.)
+            drivers = sorted(laps["Driver"].unique().tolist())
+            # Filter ut None-verdier
+            drivers = [d for d in drivers if d and isinstance(d, str)]
+            return sorted(drivers)
         except Exception as e:
             print(f"Feil ved henting av føreres forkortelser: {e}")
             return []
