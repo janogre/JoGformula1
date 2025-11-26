@@ -22,6 +22,26 @@ class F1RaceDataApp:
         self.current_session = None
         self.session_data = None
 
+    def get_driver_abbreviations(self) -> List[str]:
+        """
+        Henter liste over føreres forkortelser (f.eks. VER, LEC, ALO)
+
+        Returns:
+            Sortert liste med føreres 3-bokstav-koder
+        """
+        if self.current_session is None:
+            return []
+
+        try:
+            # FastF1 session.drivers gir forkortelserelefone
+            drivers = list(self.current_session.drivers)
+            # Sørg for at de er strenger og sorter dem
+            drivers = sorted([str(d) for d in drivers if d])
+            return drivers
+        except Exception as e:
+            print(f"Feil ved henting av føreres forkortelser: {e}")
+            return []
+
     def load_session(
         self, year: int, grand_prix: str, session_type: str = "R"
     ):

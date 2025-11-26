@@ -134,7 +134,7 @@ with tab1:
     with col1:
         # Get available drivers
         if app.current_session is not None:
-            drivers = sorted(app.current_session.drivers)
+            drivers = app.get_driver_abbreviations()
             selected_drivers = st.multiselect(
                 "Select Drivers to Compare:",
                 drivers,
@@ -197,7 +197,7 @@ with tab2:
     st.header("Telemetry Analysis")
 
     if app.current_session is not None:
-        drivers = sorted(app.current_session.drivers)
+        drivers = app.get_driver_abbreviations()
         selected_driver = st.selectbox("Select Driver:", drivers, key="telemetry_driver")
 
         col1, col2 = st.columns([2, 1])
@@ -265,7 +265,7 @@ with tab3:
     st.header("Track Position Analysis")
 
     if app.current_session is not None:
-        drivers = sorted(app.current_session.drivers)
+        drivers = app.get_driver_abbreviations()
         selected_drivers_track = st.multiselect(
             "Select Drivers:",
             drivers,
@@ -313,10 +313,11 @@ with tab4:
         if tyre_data is not None and not tyre_data.empty:
             # Show tyre info for selected drivers
             if app.current_session is not None:
+                drivers = app.get_driver_abbreviations()
                 selected_drivers_tyre = st.multiselect(
                     "Select Drivers:",
-                    sorted(app.current_session.drivers),
-                    default=sorted(app.current_session.drivers)[:3],
+                    drivers,
+                    default=drivers[:3] if len(drivers) >= 3 else drivers,
                     key="tyre_drivers"
                 )
 
@@ -330,9 +331,10 @@ with tab4:
     with col2:
         st.subheader("Tyre Degradation")
         if app.current_session is not None:
+            drivers = app.get_driver_abbreviations()
             selected_driver_deg = st.selectbox(
                 "Select Driver:",
-                sorted(app.current_session.drivers),
+                drivers,
                 key="degradation_driver"
             )
 
@@ -359,7 +361,7 @@ with tab5:
     st.header("Driver Comparison Dashboard")
 
     if app.current_session is not None:
-        drivers = sorted(app.current_session.drivers)
+        drivers = app.get_driver_abbreviations()
 
         col1, col2 = st.columns(2)
 
