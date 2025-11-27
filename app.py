@@ -127,8 +127,8 @@ if session_info:
 st.divider()
 
 # Tabs for different analyses
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📊 Lap Times", "🏁 Telemetry", "🛣️ Track Position", "🛞 Tyre Data", "👥 Driver Comparison", "🎬 Race Replay"]
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+    ["📊 Lap Times", "🏁 Telemetry", "🛣️ Track Position", "🛞 Tyre Data", "🥊 Head-to-Head", "👥 Driver Comparison", "🎬 Race Replay"]
 )
 
 # ==================== TAB 1: LAP TIMES ====================
@@ -362,8 +362,169 @@ with tab4:
                 )
                 st.plotly_chart(fig)
 
-# ==================== TAB 5: DRIVER COMPARISON ====================
+# ==================== TAB 5: HEAD-TO-HEAD ====================
 with tab5:
+    st.header("🥊 Head-to-Head Driver Comparison")
+
+    if app.current_session is not None:
+        drivers = app.get_driver_abbreviations()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Driver Selection")
+            driver1 = st.selectbox("First Driver:", drivers, key="h2h_driver1")
+            driver2 = st.selectbox("Second Driver:", drivers, index=1 if len(drivers) > 1 else 0, key="h2h_driver2")
+
+        with col2:
+            st.subheader("Data Selection")
+            comparison_type = st.radio(
+                "Show:",
+                ["Lap Times", "Gap Analysis", "Telemetry Overlay"],
+                horizontal=True
+            )
+
+        if driver1 and driver2 and driver1 != driver2:
+            if comparison_type == "Lap Times":
+                st.subheader(f"📊 Lap Times: {driver1} vs {driver2}")
+                h2h_data = app.head_to_head_lap_comparison(driver1, driver2)
+                if h2h_data is not None and not h2h_data.empty:
+                    # Show data table
+                    display_cols = ["LapNumber", f"{driver1}_Time", f"{driver2}_Time", f"Gap ({driver1} vs {driver2})"]
+                    display_df = h2h_data[display_cols].copy()
+                    display_df[f"{driver1}_Time"] = display_df[f"{driver1}_Time"].astype(str)
+                    display_df[f"{driver2}_Time"] = display_df[f"{driver2}_Time"].astype(str)
+                    display_df[f"Gap ({driver1} vs {driver2})"] = display_df[f"Gap ({driver1} vs {driver2})"].round(3)
+
+                    st.dataframe(display_df)
+
+                    # Show gap chart
+                    gap_col = f"Gap ({driver1} vs {driver2})"
+                    valid_data = h2h_data[h2h_data[gap_col].notna()].copy()
+
+                    if not valid_data.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=valid_data["LapNumber"],
+                            y=valid_data[gap_col],
+                            mode='lines+markers',
+                            name=f"{driver2} vs {driver1}",
+                            line=dict(color="blue", width=2),
+                            marker=dict(size=6),
+                            fill='tozeroy'
+                        ))
+                        fig.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Equal")
+
+                        fig.update_layout(
+                            title=f"Gap Between {driver1} and {driver2}",
+                            xaxis_title="Lap Number",
+                            yaxis_title="Gap (seconds)",
+                            height=400,
+                            hovermode='x unified'
+                        )
+                        st.plotly_chart(fig)
+                else:
+                    st.warning(f"No lap data available for {driver1} vs {driver2}")
+
+            elif comparison_type == "Gap Analysis":
+                st.subheader(f"📈 Gap Statistics: {driver1} vs {driver2}")
+                gap_stats = app.get_gap_to_driver(driver1, driver2)
+                if gap_stats is not None and not gap_stats.empty:
+                    st.dataframe(gap_stats)
+                else:
+                    st.warning("Could not calculate gap statistics")
+
+            elif comparison_type == "Telemetry Overlay":
+                st.subheader(f"📉 Telemetry Comparison: {driver1} vs {driver2}")
+
+                col_telem1, col_telem2 = st.columns(2)
+
+                with col_telem1:
+                    lap_numbers_1 = app.get_lap_times_by_driver(driver1)
+                    if lap_numbers_1 is not None and not lap_numbers_1.empty:
+                        max_lap_1 = int(lap_numbers_1["LapNumber"].max())
+                        lap_num_1 = st.number_input(
+                            f"{driver1} Lap Number:",
+                            min_value=1,
+                            max_value=max_lap_1,
+                            value=max_lap_1,
+                            key="h2h_lap1"
+                        )
+                    else:
+                        lap_num_1 = None
+
+                with col_telem2:
+                    lap_numbers_2 = app.get_lap_times_by_driver(driver2)
+                    if lap_numbers_2 is not None and not lap_numbers_2.empty:
+                        max_lap_2 = int(lap_numbers_2["LapNumber"].max())
+                        lap_num_2 = st.number_input(
+                            f"{driver2} Lap Number:",
+                            min_value=1,
+                            max_value=max_lap_2,
+                            value=max_lap_2,
+                            key="h2h_lap2"
+                        )
+                    else:
+                        lap_num_2 = None
+
+                if lap_num_1 and lap_num_2:
+                    telemetry_data = app.head_to_head_telemetry(driver1, driver2, lap_number=lap_num_1)
+
+                    if telemetry_data and telemetry_data.get(driver1) is not None and telemetry_data.get(driver2) is not None:
+                        fig = go.Figure()
+
+                        tel1 = telemetry_data[driver1]
+                        tel2 = telemetry_data[driver2]
+
+                        if "Speed" in tel1.columns:
+                            fig.add_trace(go.Scatter(
+                                y=tel1["Speed"],
+                                name=f"{driver1} Speed",
+                                line=dict(color="blue", width=2),
+                                yaxis="y1"
+                            ))
+
+                        if "Speed" in tel2.columns:
+                            fig.add_trace(go.Scatter(
+                                y=tel2["Speed"],
+                                name=f"{driver2} Speed",
+                                line=dict(color="red", width=2, dash="dash"),
+                                yaxis="y1"
+                            ))
+
+                        if "Throttle" in tel1.columns:
+                            fig.add_trace(go.Scatter(
+                                y=tel1["Throttle"] * 100,
+                                name=f"{driver1} Throttle",
+                                line=dict(color="green", width=1),
+                                yaxis="y2"
+                            ))
+
+                        if "Throttle" in tel2.columns:
+                            fig.add_trace(go.Scatter(
+                                y=tel2["Throttle"] * 100,
+                                name=f"{driver2} Throttle",
+                                line=dict(color="lightgreen", width=1, dash="dash"),
+                                yaxis="y2"
+                            ))
+
+                        fig.update_layout(
+                            title=f"Telemetry: {driver1} (Lap {lap_num_1}) vs {driver2} (Lap {lap_num_2})",
+                            height=500,
+                            hovermode='x unified',
+                            yaxis=dict(title="Speed (km/h)"),
+                            yaxis2=dict(title="Throttle (%)", overlaying="y", side="right")
+                        )
+                        st.plotly_chart(fig)
+                    else:
+                        st.warning("Telemetry data not available for selected laps")
+        else:
+            st.info("👉 Select two different drivers to compare")
+    else:
+        st.error("Session not loaded")
+
+# ==================== TAB 6: DRIVER COMPARISON ====================
+with tab6:
     st.header("Driver Comparison Dashboard")
 
     if app.current_session is not None:
@@ -416,8 +577,8 @@ with tab5:
 
                 st.dataframe(display_comparison)
 
-# ==================== TAB 6: RACE REPLAY ====================
-with tab6:
+# ==================== TAB 7: RACE REPLAY ====================
+with tab7:
     st.header("🎬 Race Replay - Live Data Simulation")
 
     # Initialize session state for race replay

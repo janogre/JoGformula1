@@ -467,3 +467,168 @@ class F1RaceDataApp:
         except Exception as e:
             print(f"Feil ved henting av rundeprogresjonen: {e}")
             return None
+
+    def head_to_head_lap_comparison(self, driver1: str, driver2: str) -> Optional[pd.DataFrame]:
+        """
+        Sammenligner lap-by-lap tider for 2 førere
+
+        Args:
+            driver1: Første sjåfør (3-bokstav-kode)
+            driver2: Annen sjåfør (3-bokstav-kode)
+
+        Returns:
+            DataFrame med sammenlignbar data for begge førere
+        """
+        if self.current_session is None:
+            return None
+
+        try:
+            laps1 = self.current_session.laps.pick_drivers(driver1)
+            laps2 = self.current_session.laps.pick_drivers(driver2)
+
+            if laps1 is None or laps1.empty or laps2 is None or laps2.empty:
+                return None
+
+            # Hent lap numbers og tider
+            comp_data = []
+            max_laps = max(laps1["LapNumber"].max(), laps2["LapNumber"].max())
+
+            for lap_num in range(1, int(max_laps) + 1):
+                row = {"LapNumber": lap_num}
+
+                # Driver 1
+                lap1 = laps1[laps1["LapNumber"] == lap_num]
+                if not lap1.empty:
+                    row[f"{driver1}_Time"] = lap1["LapTime"].iloc[0]
+                    row[f"{driver1}_Compound"] = lap1["Compound"].iloc[0]
+                else:
+                    row[f"{driver1}_Time"] = None
+                    row[f"{driver1}_Compound"] = None
+
+                # Driver 2
+                lap2 = laps2[laps2["LapNumber"] == lap_num]
+                if not lap2.empty:
+                    row[f"{driver2}_Time"] = lap2["LapTime"].iloc[0]
+                    row[f"{driver2}_Compound"] = lap2["Compound"].iloc[0]
+                else:
+                    row[f"{driver2}_Time"] = None
+                    row[f"{driver2}_Compound"] = None
+
+                comp_data.append(row)
+
+            df = pd.DataFrame(comp_data)
+
+            # Beregn gap (i sekunder)
+            df[f"Gap ({driver1} vs {driver2})"] = (
+                df[f"{driver2}_Time"].dt.total_seconds() -
+                df[f"{driver1}_Time"].dt.total_seconds()
+            )
+
+            return df
+        except Exception as e:
+            print(f"Feil ved head-to-head sammenligning: {e}")
+            return None
+
+    def get_gap_to_driver(self, driver1: str, driver2: str) -> Optional[pd.DataFrame]:
+        """
+        Beregner gjennomsnittlig gap mellom 2 førere over løpet
+
+        Args:
+            driver1: Første sjåfør
+            driver2: Annen sjåfør
+
+        Returns:
+            DataFrame med gap-statistikk
+        """
+        if self.current_session is None:
+            return None
+
+        try:
+            comparison = self.head_to_head_lap_comparison(driver1, driver2)
+            if comparison is None or comparison.empty:
+                return None
+
+            gap_col = f"Gap ({driver1} vs {driver2})"
+
+            # Fjern NaN-verdier
+            valid_gaps = comparison[gap_col].dropna()
+
+            if valid_gaps.empty:
+                return None
+
+            return pd.DataFrame({
+                "Metric": [
+                    "Average Gap",
+                    "Max Gap (favors " + driver2 + ")",
+                    "Min Gap (favors " + driver1 + ")",
+                    "Std Dev",
+                ],
+                "Value": [
+                    f"{valid_gaps.mean():.3f}s",
+                    f"{valid_gaps.max():.3f}s",
+                    f"{valid_gaps.min():.3f}s",
+                    f"{valid_gaps.std():.3f}s",
+                ],
+            })
+        except Exception as e:
+            print(f"Feil ved gap-beregning: {e}")
+            return None
+
+    def head_to_head_telemetry(self, driver1: str, driver2: str, lap_number: Optional[int] = None) -> Optional[dict]:
+        """
+        Henter telemetri for 2 førere på samme lap for sammenligning
+
+        Args:
+            driver1: Første sjåfør
+            driver2: Annen sjåfør
+            lap_number: Spesifikk lap (hvis None, brukes raskeste lap for hver)
+
+        Returns:
+            Dictionary med telemetri for begge førere
+        """
+        if self.current_session is None:
+            return None
+
+        try:
+            laps1 = self.current_session.laps.pick_drivers(driver1)
+            laps2 = self.current_session.laps.pick_drivers(driver2)
+
+            if laps1 is None or laps1.empty or laps2 is None or laps2.empty:
+                return None
+
+            result = {}
+
+            # Get telemetry for driver1
+            if lap_number is not None:
+                lap1_rows = laps1[laps1["LapNumber"] == lap_number]
+                if not lap1_rows.empty:
+                    lap1 = lap1_rows.iloc[0]
+                else:
+                    lap1 = laps1.pick_fastest()
+            else:
+                lap1 = laps1.pick_fastest()
+
+            if lap1 is not None:
+                result[driver1] = lap1.get_telemetry()
+            else:
+                result[driver1] = None
+
+            # Get telemetry for driver2
+            if lap_number is not None:
+                lap2_rows = laps2[laps2["LapNumber"] == lap_number]
+                if not lap2_rows.empty:
+                    lap2 = lap2_rows.iloc[0]
+                else:
+                    lap2 = laps2.pick_fastest()
+            else:
+                lap2 = laps2.pick_fastest()
+
+            if lap2 is not None:
+                result[driver2] = lap2.get_telemetry()
+            else:
+                result[driver2] = None
+
+            return result if result.get(driver1) is not None or result.get(driver2) is not None else None
+        except Exception as e:
+            print(f"Feil ved henting av head-to-head telemetri: {e}")
+            return None
